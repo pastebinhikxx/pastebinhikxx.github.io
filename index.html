@@ -1,11 +1,112 @@
-<!doctype html>
-<html lang="ru">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Мой GitHub Pages сайт</title>
+<meta charset="UTF-8">
+<title>Beat Maker</title>
+<style>
+  body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 30px; }
+  canvas { border: 1px solid black; margin: 20px 0; }
+  button, input { margin: 5px; }
+</style>
 </head>
 <body>
-  <h1>Привет, я живой сайт на github.io 🚀</h1>
-  <p>Сделано за 5 минут — и ты тоже можешь такое.</p>
+
+<h1>Mini Beat Maker 🎵</h1>
+<input type="text" id="trackName" placeholder="Track name...">
+<canvas id="waveform" width="600" height="100"></canvas>
+<div>
+  <button id="playBtn">Play</button>
+  <button id="stopBtn">Stop</button>
+  <button id="generateBtn">Generate Random Beat</button>
+  <button id="downloadBtn">Download WAV</button>
+</div>
+
+<script>
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let buffer, source;
+const canvas = document.getElementById('waveform');
+const ctx = canvas.getContext('2d');
+
+function generateRandomBeat() {
+  // simple random noise beat
+  const length = audioCtx.sampleRate * 2; // 2 sec
+  buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i++) {
+    data[i] = (Math.random() * 2 - 1) * (i % 100 < 1 ? 0.5 : 0); // random pulses
+  }
+  drawWaveform(data);
+}
+
+function drawWaveform(data) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i+=100) {
+    const x = (i / data.length) * canvas.width;
+    const y = (0.5 - data[i]/2) * canvas.height;
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+function playBuffer() {
+  if (!buffer) return;
+  stopBuffer();
+  source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioCtx.destination);
+  source.start();
+}
+
+function stopBuffer() {
+  if (source) source.stop();
+}
+
+// download function (simplified WAV export)
+function downloadBuffer() {
+  if (!buffer) return;
+  const data = buffer.getChannelData(0);
+  const wavHeader = new ArrayBuffer(44);
+  const view = new DataView(wavHeader);
+  function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  }
+  // RIFF chunk descriptor
+  writeString(view,0,'RIFF');
+  view.setUint32(4, 36 + data.length*2, true);
+  writeString(view,8,'WAVE');
+  writeString(view,12,'fmt ');
+  view.setUint32(16,16,true); // PCM chunk size
+  view.setUint16(20,1,true); // PCM format
+  view.setUint16(22,1,true); // channels
+  view.setUint32(24, audioCtx.sampleRate, true);
+  view.setUint32(28, audioCtx.sampleRate*2, true); // byte rate
+  view.setUint16(32,2,true); // block align
+  view.setUint16(34,16,true); // bits per sample
+  writeString(view,36,'data');
+  view.setUint32(40,data.length*2,true);
+  
+  const wavBytes = new Uint8Array(44 + data.length*2);
+  wavBytes.set(new Uint8Array(wavHeader),0);
+  let offset = 44;
+  for (let i = 0; i < data.length; i++, offset+=2) {
+    let s = Math.max(-1, Math.min(1, data[i]));
+    wavBytes[offset] = s < 0 ? s*32768 & 0xFF : s*32767 & 0xFF;
+    wavBytes[offset+1] = s < 0 ? (s*32768>>8) & 0xFF : (s*32767>>8) & 0xFF;
+  }
+  const blob = new Blob([wavBytes], {type:'audio/wav'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (document.getElementById('trackName').value || 'beat')+'.wav';
+  a.click();
+}
+
+document.getElementById('generateBtn').onclick = generateRandomBeat;
+document.getElementById('playBtn').onclick = playBuffer;
+document.getElementById('stopBtn').onclick = stopBuffer;
+document.getElementById('downloadBtn').onclick = downloadBuffer;
+</script>
+
 </body>
 </html>
